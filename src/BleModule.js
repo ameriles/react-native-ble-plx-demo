@@ -4,6 +4,7 @@ import {
 } from 'react-native'
 import { BleManager } from 'react-native-ble-plx';
 import { Buffer } from 'buffer';
+var binaryToBase64 = require('binaryToBase64');
 
 export default class BleModule{
     constructor(){
@@ -203,12 +204,23 @@ export default class BleModule{
      * type base64,hex
      * */
     write(value,index){
-        // let asciiValue = new Buffer(value, "base64").toString('ascii'); //转成ascii发送过去
-        // let hexValue = new Buffer(value, "base64").toString('hex');  //转成16进制数据发送过去       
+        //let asciiValue = new Buffer(value, "base64").toString('ascii'); //转成ascii发送过去
+        //let hexValue = new Buffer(value, "base64").toString('hex');  //转成16进制数据发送过去       
+
+        var str = value;
+        var buf = new ArrayBuffer(str.length * 2); // 2 bytes for each char
+        var bufView = new Uint16Array(buf);
+        for (var i = 0, strLen = str.length; i < strLen; i++) {
+          bufView[i] = str.charCodeAt(i);
+        }
+
+        var encoded = binaryToBase64(buf)
+        console.log('Try to write: ' + encoded);
+
         let transactionId = 'write';
         return new Promise( (resolve, reject) =>{      
             this.manager.writeCharacteristicWithResponseForDevice(this.peripheralId,this.writeWithResponseServiceUUID[index], 
-                this.writeWithResponseCharacteristicUUID[index],value,transactionId)
+                this.writeWithResponseCharacteristicUUID[index],encoded,transactionId)
                 .then(characteristic=>{                    
                     console.log('write success',value);
                     resolve(characteristic);
@@ -249,6 +261,6 @@ export default class BleModule{
     }
 
     alert(text){
-        Alert.alert('提示',text,[{ text:'确定',onPress:()=>{ } }]);
+        Alert.alert('Alert',text,[{ text:'determine',onPress:()=>{ } }]);
     }
 }

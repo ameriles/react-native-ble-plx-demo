@@ -8,7 +8,8 @@ import {
   FlatList,
   TextInput,
   Platform,
-  Alert
+  Alert,
+  PermissionsAndroid
 } from 'react-native';
 import BleModule from './BleModule';
 //确保全局只有一个BleManager实例，BleModule类保存着蓝牙的连接信息
@@ -32,6 +33,32 @@ export default class App extends Component {
     }
 
     componentWillMount(){
+        const promise = PermissionsAndroid.check( PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION );
+        promise.then((granted)=> {
+            if (!granted) {
+                console.log( "PERMISSION NOT GRANTED: ask for permission" )
+                return PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
+                    title: 'BLE Permission',
+                    message: 'The App needs access to your Location so you can connect to the BLE device.',
+                    buttonNeutral: 'Ask Me Later',
+                    buttonNegative: 'Cancel',
+                    buttonPositive: 'OK',
+                })
+            } else {
+                console.log("PERMISSION GRANTED!");
+            }
+        }).then((granted) => {
+            console.log(granted);
+            if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+                console.log("PERMISSION GRANTED: " + granted);
+            } else {
+                console.log("PERMISSION DENIED");
+            }
+        }).catch((error) => {
+            console.warn( "CAN'T EVALUATE PERMISSION: " + error )
+        });
+
+        
         // 监听蓝牙开关
         this.onStateChangeListener = BluetoothManager.manager.onStateChange((state) => {
             console.log("onStateChange: ", state);
@@ -49,7 +76,7 @@ export default class App extends Component {
     }
 
     alert(text){
-        Alert.alert('提示',text,[{ text:'确定',onPress:()=>{ } }]);
+        Alert.alert('Alert',text,[{ text:'OK',onPress:()=>{ } }]);
     }
 
     scan(){
@@ -60,7 +87,7 @@ export default class App extends Component {
                 if (error) {
                     console.log('startDeviceScan error:',error)
                     if(error.errorCode == 102){
-                        this.alert('请打开手机蓝牙后再搜索');
+                        this.alert('Please open your phone Bluetooth and search again');
                     }
                     this.setState({scaning:false});   
                 }else{
@@ -88,7 +115,7 @@ export default class App extends Component {
             this.setState({scaning:false});
         }
         if(BluetoothManager.isConnecting){
-            console.log('当前蓝牙正在连接时不能打开另一个连接进程');
+            console.log('Cannot open another connection process while Bluetooth is currently connected');
             return;
         }
         let newData = [...this.deviceMap.values()];
@@ -119,9 +146,12 @@ export default class App extends Component {
 
     write=(index,type)=>{
         if(this.state.text.length == 0){
-            this.alert('请输入消息');
+            this.alert('Please enter a message');
             return;
         }
+
+        console.log("Attemping to write: " + this.state.text)
+
         BluetoothManager.write(this.state.text,index,type)
             .then(characteristic=>{
                 this.bluetoothReceiveData = [];
@@ -137,7 +167,7 @@ export default class App extends Component {
 
     writeWithoutResponse=(index,type)=>{
         if(this.state.text.length == 0){
-            this.alert('请输入消息');
+            this.alert('Please enter a message');
             return;
         }
         BluetoothManager.writeWithoutResponse(this.state.text,index,type)
@@ -208,7 +238,7 @@ export default class App extends Component {
                 style={styles.item}>                         
                 <View style={{flexDirection:'row'}}>
                     <Text style={{color:'black'}}>{data.name?data.name:''}</Text>
-                    <Text style={{color:"red",marginLeft:50}}>{data.isConnecting?'连接中...':''}</Text>
+                    <Text style={{color:"red",marginLeft:50}}>{data.isConnecting?'Connecting...':''}</Text>
                 </View>
                 <Text>{data.id}</Text>
                
@@ -223,11 +253,11 @@ export default class App extends Component {
                     activeOpacity={0.7}
                     style={[styles.buttonView,{marginHorizontal:10,height:40,alignItems:'center'}]}
                     onPress={this.state.isConnected?this.disconnect.bind(this):this.scan.bind(this)}>
-                    <Text style={styles.buttonText}>{this.state.scaning?'正在搜索中':this.state.isConnected?'断开蓝牙':'搜索蓝牙'}</Text>
+                    <Text style={styles.buttonText}>{this.state.scaning?'Searching':this.state.isConnected?'Disconnect Bluetooth':'Search for Bluetooth'}</Text>
                 </TouchableOpacity>
                 
                 <Text style={{marginLeft:10,marginTop:10}}>
-                    {this.state.isConnected?'当前连接的设备':'可用设备'}
+                    {this.state.isConnected?'Currently connected device':'Available devices'}
                 </Text>
             </View>
         )
@@ -238,13 +268,13 @@ export default class App extends Component {
             <View style={{marginBottom:30}}>
                 {this.state.isConnected?
                 <View>
-                    {this.renderWriteView('写数据(write)：','发送',
+                    {this.renderWriteView('Write data:','Send',
                             BluetoothManager.writeWithResponseCharacteristicUUID,this.write)}
-                    {this.renderWriteView('写数据(writeWithoutResponse)：','发送',
+                    {this.renderWriteView('Write data (no/response)','Send',
                             BluetoothManager.writeWithoutResponseCharacteristicUUID,this.writeWithoutResponse,)}
-                    {this.renderReceiveView('读取的数据：','读取',
+                    {this.renderReceiveView('Read data:','Read',
                             BluetoothManager.readCharacteristicUUID,this.read,this.state.readData)}
-                    {this.renderReceiveView(`监听接收的数据：${this.state.isMonitoring?'监听已开启':'监听未开启'}`,'开启监听',
+                    {this.renderReceiveView(`Listen for received data：${this.state.isMonitoring?'Monitoring is on':'Monitoring is not turned on'}`,'Turn on monitoring',
                             BluetoothManager.nofityCharacteristicUUID,this.monitor,this.state.receiveData)}
                 </View>                   
                 :<View style={{marginBottom:20}}></View>
@@ -277,7 +307,7 @@ export default class App extends Component {
                     <TextInput
                         style={[styles.textInput]}
                         value={this.state.text}
-                        placeholder='请输入消息'
+                        placeholder='Please enter a message'
                         onChangeText={(text)=>{
                             this.setState({text:text});
                         }}
